@@ -1154,7 +1154,7 @@
 #endif    
 
 #ifdef FEATURE_WIRE_SUPPORT
-  #include <Wire.h>  // required for FEATURE_I2C_LCD, any ADXL345 feature, FEATURE_AZ_POSITION_HMC5883L, FEATURE_EL_POSITION_ADAFRUIT_LSM303
+  #include <Wire.h>  // required for FEATURE_I2C_LCD, any ADXL345 feature, FEATURE_AZ_POSITION_HMC5883L, FEATURE_EL_POSITION_ADAFRUIT_LSM303, FEATURE_EL_POSITION_MPU6050
 #endif
 
 #if defined(FEATURE_AZ_POSITION_HMC5883L) || defined(FEATURE_AZ_POSITION_HMC5883L_USING_JARZEBSKI_LIBRARY)
@@ -1183,6 +1183,10 @@
 
 #if defined(FEATURE_EL_POSITION_ADAFRUIT_LSM303) || defined(FEATURE_AZ_POSITION_ADAFRUIT_LSM303)
   #include <Adafruit_LSM303.h>     // required for azimuth and/or elevation using LSM303 compass and/or accelerometer
+#endif
+
+#if defined(FEATURE_EL_POSITION_MPU6050)
+  #include <MPU6050.h>
 #endif
 
 #ifdef FEATURE_AZ_POSITION_POLOLU_LSM303
@@ -1699,6 +1703,10 @@ struct config_t {
 #if defined(FEATURE_EL_POSITION_ADAFRUIT_LSM303) || defined(FEATURE_AZ_POSITION_ADAFRUIT_LSM303)
   Adafruit_LSM303 lsm;
 #endif
+
+#if defined(FEATURE_EL_POSITION_MPU6050)
+  MPU6050 mpu;
+#endif //FEATURE_EL_POSITION_MPU6050
 
 #if defined(FEATURE_AZ_POSITION_POLOLU_LSM303) || defined(FEATURE_EL_POSITION_POLOLU_LSM303)
   LSM303 compass;
@@ -9658,6 +9666,26 @@ void read_elevation(byte force_read){
       #endif
     #endif // FEATURE_EL_POSITION_ADAFRUIT_LSM303
 
+
+    #ifdef FEATURE_EL_POSITION_MPU6050
+      Vector normAccel = mpu.readNormalizeAccel();
+      #ifdef DEBUG_ACCEL
+          if (debug_mode) {
+            debug.print(F("normAccel.YAxis: "));
+            debug.print(normAccel.YAxis);
+            debug.print(F(" z: "));
+            control_port->println(normAccel.ZAxis);
+          }
+      #endif // DEBUG_ACCEL
+      elevation = (atan2(normAccel.YAxis, normAccel.ZAxis) * 180) / M_PI;
+      #ifdef FEATURE_ELEVATION_CORRECTION
+        elevation = correct_elevation(elevation);
+      #endif // FEATURE_ELEVATION_CORRECTION
+      #if !defined(FEATURE_CALIBRATION)  
+      elevation = elevation + (configuration.elevation_offset);
+      #endif
+    #endif // FEATURE_EL_POSITION_MPU6050
+
     #ifdef FEATURE_EL_POSITION_POLOLU_LSM303
       compass.read();
       #ifdef DEBUG_ACCEL
@@ -11114,6 +11142,14 @@ void initialize_peripherals(){
       #endif
     }
   #endif // FEATURE_EL_POSITION_ADAFRUIT_LSM303 || FEATURE_AZ_POSITION_ADAFRUIT_LSM303
+  
+  #if defined(FEATURE_EL_POSITION_MPU6050)
+    if (!mpu.begin(MPU6050_SCALE_2000DPS, MPU6050_RANGE_2G)) {
+      #if defined(FEATURE_REMOTE_UNIT_SLAVE) || defined(FEATURE_YAESU_EMULATION) || defined(FEATURE_EASYCOM_EMULATION)
+        control_port->println(F("setup: MPU6050 error"));
+      #endif
+    }
+  #endif // FEATURE_EL_POSITION_MPU6050
 
 
   #if defined(FEATURE_AZ_POSITION_POLOLU_LSM303) || defined(FEATURE_EL_POSITION_POLOLU_LSM303)
